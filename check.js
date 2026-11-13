@@ -1,4 +1,5 @@
 import { InteractionResponseFlags, InteractionResponseType } from 'discord-interactions';
+import { setTimeout as delay } from 'node:timers/promises';
 import { capitalize, DiscordApiError, DiscordRequest } from './utils.js';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
@@ -8,6 +9,14 @@ const ADMINISTRATOR = 1n << 3n;
 const MESSAGE_CONTENT_FLAGS = (1 << 18) | (1 << 19);
 
 class CheckError extends Error {}
+
+class DiscordResponseError extends Error {
+  constructor(status) {
+    super(`Could not send check response: HTTP ${status}`);
+    this.name = 'DiscordResponseError';
+    this.status = status;
+  }
+}
 
 async function getDiscordJson(endpoint, signal) {
   try {
@@ -314,12 +323,7 @@ async function lookup(interaction, channelId, signal) {
   return result;
 }
 
-export async function handleCheck(interaction, res) {
-  res.send({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: InteractionResponseFlags.EPHEMERAL },
-  });
-
+export async function completeCheck(interaction) {
   let content;
   try {
     content = await lookup(interaction, process.env.LIST_CHANNEL_ID, AbortSignal.timeout(60000));
@@ -334,17 +338,40 @@ export async function handleCheck(interaction, res) {
     }
   }
 
-  try {
+  const signal = AbortSignal.timeout(10000);
+  for (let attempt = 0; attempt < 5; attempt++) {
     const response = await fetch(
       `https://discord.com/api/v10/webhooks/${interaction.application_id}/${interaction.token}/messages/@original`,
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
-        signal: AbortSignal.timeout(10000),
+        signal,
       },
     );
-    if (!response.ok) console.error('Could not send check response:', response.status);
+    if (response.ok) return;
+    if (response.status === 404 && attempt < 4) {
+      await delay(250 * (2 ** attempt), undefined, { signal });
+      continue;
+    }
+    if (response.status === 429 && attempt < 4) {
+      const retryAfter = Number(response.headers.get('retry-after'));
+      if (Number.isFinite(retryAfter) && retryAfter > 0 && retryAfter <= 3) {
+        await delay(retryAfter * 1000, undefined, { signal });
+        continue;
+      }
+    }
+    throw new DiscordResponseError(response.status);
+  }
+}
+
+export async function handleCheck(interaction, res) {
+  res.send({
+    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: InteractionResponseFlags.EPHEMERAL },
+  });
+  try {
+    await completeCheck(interaction);
   } catch (error) {
     console.error('Could not send check response:', error.name);
   }

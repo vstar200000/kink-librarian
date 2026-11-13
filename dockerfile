@@ -1,8 +1,6 @@
-FROM node:22-alpine
-WORKDIR /app
+FROM public.ecr.aws/lambda/nodejs:22
+WORKDIR ${LAMBDA_TASK_ROOT}
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
-USER node
-EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["index.handler"]

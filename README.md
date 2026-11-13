@@ -41,9 +41,7 @@ Example version 3 file:
   "categories": [
     {
       "category": "Types of Play",
-      "items": [
-        { "name": "Lego", "rating": "Love" }
-      ]
+      "items": [{ "name": "Lego", "rating": "Love" }]
     }
   ]
 }
@@ -74,3 +72,4 @@ The tests mock Discord and do not register commands or access the network.
 ## Future improvements
 
 - Consider notifying a list owner when someone checks their list and the JSON is malformed or the requested item is missing.
+- Include a "help" command for the bot to explain itself.

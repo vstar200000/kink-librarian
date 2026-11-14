@@ -303,6 +303,7 @@ async function lookup(interaction, channelId, signal) {
   validateList(list);
   const query = item.trim().toLowerCase();
   const matches = [];
+  const character_prepend = character ? `${character.trim()}, ` : ''; 
   for (const category of list.categories) {
     for (const entry of category.items) {
       if (entry.name.trim().toLowerCase() === query) {
@@ -311,7 +312,7 @@ async function lookup(interaction, channelId, signal) {
           : Object.entries(entry.rating)
             .map(([label, value]) => `${capitalize(label.trim())}: ${JSON.stringify(value)}`)
             .join(', ');
-        matches.push(`${character}: ${category.category}, ${item.trim()}: ${rating}`);
+        matches.push(`${character_prepend}${item.trim()}: ${rating}`);
       }
     }
   }

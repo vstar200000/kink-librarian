@@ -10,6 +10,8 @@ import { getRandomEmoji } from './utils.js';
 
 const sqs = new SQSClient({ maxAttempts: 1 });
 
+const COMMAND_LIST = ['test', 'check', 'compare'];
+
 function jsonResponse(statusCode, body) {
   return {
     statusCode,
@@ -60,7 +62,7 @@ export async function handler(event) {
       },
     });
   }
-  if (interaction.data?.name !== 'check') {
+  if (!COMMAND_LIST.includes(interaction.data?.name)) {
     return jsonResponse(400, { error: 'Unsupported command' });
   }
 

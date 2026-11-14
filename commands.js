@@ -38,6 +38,40 @@ const CHECK_COMMAND = {
 	],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHECK_COMMAND];
+const COMPARE_COMMAND = {
+	name: 'compare',
+	description: 'Compares survey answers between users.',
+	type: 1,
+	integration_types: [0],
+	contexts: [0],
+	options: [
+		{
+			type: 6,
+			name: 'other_user',
+			description: 'The other server member to compare against',
+			required: true,
+		},
+		{
+			type: 3,
+			name: 'item',
+			description: 'The item to compare',
+			required: true,
+		},
+		{
+			type: 3, 
+			name: 'other_character',
+			description: 'The other character\'s name',
+			required: false,
+		},
+		{
+			type: 3, 
+			name: 'your_character',
+			description: 'Your character\'s name',
+			required: false,
+		}
+	],
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHECK_COMMAND, COMPARE_COMMAND];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);

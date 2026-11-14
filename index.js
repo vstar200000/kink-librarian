@@ -72,14 +72,15 @@ export async function handler(event) {
       application_id: interaction.application_id,
       token: interaction.token,
       guild_id: interaction.guild_id,
-      data: { options: interaction.data.options, resolved: interaction.data.resolved },
+      member: { user: { id: interaction.member?.user?.id } },
+      data: { name: interaction.data.name, options: interaction.data.options, resolved: interaction.data.resolved },
     };
     await sqs.send(new SendMessageCommand({
       QueueUrl: process.env.SQS_QUEUE_URL,
       MessageBody: JSON.stringify(job),
     }), { abortSignal: AbortSignal.timeout(1200) });
   } catch (error) {
-    console.error('Could not queue check:', error);
+    console.error('Could not queue lookup:', error.name);
     return jsonResponse(200, {
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Could not queue the lookup. Please try again.' },

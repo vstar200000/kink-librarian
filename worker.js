@@ -1,4 +1,5 @@
 import { completeCheck } from './check.js';
+import { completeCompare } from './compare.js';
 
 export async function handler(event) {
   if (!Array.isArray(event.Records)) throw new Error('Expected SQS records.');
@@ -6,9 +7,16 @@ export async function handler(event) {
   for (const record of event.Records) {
     if (typeof record.messageId !== 'string') throw new Error('SQS record is missing its message ID.');
     try {
-      await completeCheck(JSON.parse(record.body));
+      const interaction = JSON.parse(record.body);
+      if (interaction.data?.name === 'compare') {
+        await completeCompare(interaction);
+      } else if (interaction.data?.name === 'check' || interaction.data?.name === undefined) {
+        await completeCheck(interaction);
+      } else {
+        throw new Error('Unsupported queued command.');
+      }
     } catch (error) {
-      console.error('Could not process queued check:', error.name, Number.isInteger(error.status) ? error.status : '');
+      console.error('Could not process queued lookup:', error.name, Number.isInteger(error.status) ? error.status : '');
       batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }

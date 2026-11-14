@@ -311,9 +311,7 @@ async function lookup(interaction, channelId, signal) {
           : Object.entries(entry.rating)
             .map(([label, value]) => `${capitalize(label.trim())}: ${JSON.stringify(value)}`)
             .join(', ');
-		const selectedUser = interaction.data.resolved.users[user];
-		const displayName = interaction.data.resolved.members[user].nick ?? selectedUser.global_name ?? selectedUser.username;
-        matches.push(`${displayName}: ${category.category}, ${item.trim()}: ${rating}`);
+        matches.push(`${character}: ${category.category}, ${item.trim()}: ${rating}`);
       }
     }
   }

@@ -1,10 +1,10 @@
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import {
-  InteractionResponseFlags,
-  InteractionResponseType,
-  InteractionType,
-  MessageComponentTypes,
-  verifyKey,
+	InteractionResponseFlags,
+	InteractionResponseType,
+	InteractionType,
+	MessageComponentTypes,
+	verifyKey,
 } from 'discord-interactions';
 import { getRandomEmoji } from './utils.js';
 
@@ -77,7 +77,7 @@ export async function handler(event) {
       MessageBody: JSON.stringify(job),
     }), { abortSignal: AbortSignal.timeout(1200) });
   } catch (error) {
-    console.error('Could not queue check:', error.name);
+    console.error('Could not queue check:', error);
     return jsonResponse(200, {
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Could not queue the lookup. Please try again.' },

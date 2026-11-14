@@ -5,6 +5,11 @@ const VIEW_CHANNEL = 1n << 10n;
 const READ_MESSAGE_HISTORY = 1n << 16n;
 const ADMINISTRATOR = 1n << 3n;
 const MESSAGE_CONTENT_FLAGS = (1 << 18) | (1 << 19);
+const ratingTypes = new Map([
+  ['crave', 'positive'], ['love', 'positive'],
+  ['willing', 'neutral'], ['ask me', 'neutral'],
+  ['never', 'negative'], ['hard limit', 'negative'],
+]);
 
 export class ListError extends Error {}
 
@@ -301,4 +306,43 @@ export function formatRating(rating) {
   return Object.entries(rating)
     .map(([label, value]) => `${capitalize(label.trim())}: ${JSON.stringify(value)}`)
     .join(', ');
+}
+
+export function compareRatings(yours, theirs) {
+  const classify = value =>
+    typeof value === 'string' ? ratingTypes.get(value.trim().toLowerCase()) : undefined;
+
+  const a = classify(yours);
+  const b = classify(theirs);
+
+  if (!a || !b) return 'Cannot compare unrecognized ratings.';
+  if (a === 'negative' || b === 'negative') return 'At least one rating is a limit. Avoid this.';
+  if (a === 'positive' && b === 'positive') return 'Both ratings are positive.';
+  if (a === 'neutral' && b === 'neutral') return 'Both ratings are neutral.';
+  return a === 'positive'
+    ? 'You like it; they are neutral.'
+    : 'You are neutral; they like it.';
+}
+
+export function compareSplitRatings(yours, theirs) {
+  const normalize = rating => new Map(
+    Object.entries(rating).map(([label, value]) => [label.trim().toLowerCase(), value]),
+  );
+  const yourRoles = normalize(yours);
+  const theirRoles = normalize(theirs);
+  const pairs = [
+    ['self', 'partner'],
+    ['actor', 'subject'],
+    ['center', 'circle'],
+  ];
+  const roles = pairs.find(([first, second]) =>
+    yourRoles.size === 2 && theirRoles.size === 2 &&
+    yourRoles.has(first) && yourRoles.has(second) &&
+    theirRoles.has(first) && theirRoles.has(second));
+  if (!roles) return 'Cannot compare split ratings with different or unrecognized roles.';
+  const [first, second] = roles;
+  return [
+    `Your ${first} / their ${second}: ${compareRatings(yourRoles.get(first), theirRoles.get(second))}`,
+    `Your ${second} / their ${first}: ${compareRatings(yourRoles.get(second), theirRoles.get(first))}`,
+  ].join('\n');
 }

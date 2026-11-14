@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleCompare } from './compare.js';
+import { compareRatings, compareSplitRatings } from './list-utils.js';
 
 const interaction = {
   application_id: '10',
@@ -106,7 +107,7 @@ test('defers privately and loads both lists concurrently for comparison', async 
   const { deferred, result } = await runCompare({ checkConcurrent: true });
   assert.deepEqual(deferred, { type: 5, data: { flags: 64 } });
   assert.deepEqual(result, {
-    content: 'lego\nYour list ("Anne") (Games): Love\nOther member’s list ("Bob") (Games): Actor: "Like", Subject: "Maybe"',
+    content: 'lego\nYour list ("Anne"): Love\nOther member’s list ("Bob"): Actor: "Like", Subject: "Maybe"\nVerdict: Cannot compare a single rating with a split rating.',
     allowed_mentions: { parse: [] },
   });
 });
@@ -123,7 +124,7 @@ test('selects each character independently and identifies ambiguous choices', as
     { name: 'other_character', value: ' bOb ' },
   );
   const selected = await runCompare({ ...options, request });
-  assert.equal(selected.result.content, 'lego\nYour list ("Anne") (Games): Love\nOther member’s list ("Bob") (Games): Maybe');
+  assert.equal(selected.result.content, 'lego\nYour list ("Anne"): Love\nOther member’s list ("Bob"): Maybe\nVerdict: Cannot compare unrecognized ratings.');
   const wrong = await runCompare({ ...options, request: withOptions(
     { name: 'your_character', value: 'Anne' },
     { name: 'other_character', value: 'Unknown' },
@@ -143,7 +144,7 @@ test('compares two characters of the same member without loading uploads twice',
     request,
     yourLists: [list('Anne', 'Love'), list('Alice', 'Like')],
   });
-  assert.equal(result.content, 'lego\nYour list ("Anne") (Games): Love\nOther member’s list ("Alice") (Games): Like');
+  assert.equal(result.content, 'lego\nYour list ("Anne"): Love\nOther member’s list ("Alice"): Like\nVerdict: Cannot compare unrecognized ratings.');
   assert.equal(calls.filter(url => url.includes('/threads/active')).length, 1);
 });
 
@@ -154,7 +155,8 @@ test('reports missing uploads, malformed lists, and missing items for the right 
   assert.match(malformed.result.content, /^Your list:.*malformed/);
   const noItem = await runCompare({ otherLists: [{ listName: 'Bob', categories: [] }] });
   assert.match(noItem.result.content, /Other member’s list: The requested item was not found/);
-  assert.match(noItem.result.content, /Your list \("Anne"\) \(Games\): Love/);
+  assert.match(noItem.result.content, /Your list \("Anne"\): Love/);
+  assert.doesNotMatch(noItem.result.content, /Verdict:/);
 });
 
 test('supports unnamed lists and preserves all matching categories', async () => {
@@ -166,11 +168,69 @@ test('supports unnamed lists and preserves all matching categories', async () =>
   }];
   const { result } = await runCompare({ yourLists });
   assert.match(result.content, /Your list \(First\): Love\nYour list \(Second\): Like/);
+  assert.match(result.content, /Verdict \(First\): No matching item in the other member’s list\./);
   const named = await runCompare({
     yourLists,
     request: withOptions({ name: 'your_character', value: 'Anne' }),
   });
   assert.match(named.result.content, /^Your list:.*only list has no character name/);
+});
+
+test('compares scalar ratings after normalizing case and whitespace', () => {
+  assert.equal(compareRatings(' Crave ', 'lOvE'), 'Both ratings are positive.');
+  assert.equal(compareRatings('Willing', 'Ask Me'), 'Both ratings are neutral.');
+  assert.equal(compareRatings('Love', 'Willing'), 'You like it; they are neutral.');
+  assert.equal(compareRatings('Willing', 'Love'), 'You are neutral; they like it.');
+  assert.equal(compareRatings('Never', 'Crave'), 'At least one rating is a limit. Avoid this.');
+  assert.equal(compareRatings('Love', ' Hard Limit '), 'At least one rating is a limit. Avoid this.');
+  assert.equal(compareRatings('unknown', 'Love'), 'Cannot compare unrecognized ratings.');
+});
+
+test('compares both directions of complementary split ratings', () => {
+  const result = compareSplitRatings(
+    { self: 'Never', partner: 'Crave' },
+    { partner: 'Never', self: 'Crave' },
+  );
+  assert.equal(result, [
+    'Your self / their partner: At least one rating is a limit. Avoid this.',
+    'Your partner / their self: Both ratings are positive.',
+  ].join('\n'));
+  for (const [first, second] of [['actor', 'subject'], ['center', 'circle']]) {
+    assert.match(compareSplitRatings(
+      { [first.toUpperCase()]: 'Love', [second]: 'Willing' },
+      { [second]: 'Crave', [first]: 'Ask Me' },
+    ), new RegExp(`Your ${first} / their ${second}: Both ratings are positive`));
+  }
+  assert.match(compareSplitRatings({ self: 'Love', partner: 'Love' }, { actor: 'Love', subject: 'Love' }), /unrecognized roles/);
+  assert.match(compareSplitRatings({ foo: 'Love', bar: 'Love' }, { foo: 'Love', bar: 'Love' }), /unrecognized roles/);
+  assert.match(compareSplitRatings({ self: 'unknown', partner: 'Love' }, { self: 'Love', partner: 'Love' }), /unrecognized ratings/);
+});
+
+test('shows a verdict for each direction of split answers', async () => {
+  const { result } = await runCompare({
+    yourLists: [list('Anne', { self: 'Never', partner: 'Crave' })],
+    otherLists: [list('Bob', { self: 'Crave', partner: 'Never' })],
+  });
+  assert.match(result.content, /Verdict: Your self \/ their partner: At least one rating is a limit\. Avoid this\./);
+  assert.match(result.content, /Your partner \/ their self: Both ratings are positive\./);
+});
+
+test('pairs repeated items by category and reports ambiguous or unmatched entries', async () => {
+  const categories = entries => entries.map(([category, ratings]) => ({
+    category, items: ratings.map(rating => ({ name: 'Lego', rating })),
+  }));
+  const { result } = await runCompare({
+    yourLists: [{ listName: 'Anne', categories: categories([
+      ['Games', ['Love']], ['Shared', ['Love', 'Crave']], ['Only yours', ['Love']],
+    ]) }],
+    otherLists: [{ listName: 'Bob', categories: categories([
+      [' games ', ['Crave']], ['Shared', ['Love']], ['Only theirs', ['Love']],
+    ]) }],
+  });
+  assert.match(result.content, /Verdict \(Games\): Both ratings are positive\./);
+  assert.match(result.content, /Verdict \(Shared\): Multiple matching items in this category; comparison is ambiguous\./);
+  assert.match(result.content, /Verdict \(Only yours\): No matching item in the other member’s list\./);
+  assert.match(result.content, /Verdict \(Only theirs\): No matching item in your list\./);
 });
 
 test('rejects invalid members and oversized results', async () => {

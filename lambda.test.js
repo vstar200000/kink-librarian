@@ -128,7 +128,7 @@ test('queues compare with the invoking member and dispatches it to the compare w
       const name = url.endsWith('/32.json') ? 'Requester' : 'Other';
       return new Response(JSON.stringify({
         listName: name,
-        categories: [{ category: 'Games', items: [{ name: 'Lego', rating: name }] }],
+        categories: [{ category: 'Games', items: [{ name: 'Lego', rating: name === 'Requester' ? 'Love' : 'Crave' }] }],
       }));
     }
     const endpoint = url.replace('https://discord.com/api/v10/', '');
@@ -156,7 +156,7 @@ test('queues compare with the invoking member and dispatches it to the compare w
   };
   try {
     assert.deepEqual(await workerHandler({ Records: [{ messageId: 'compare', body: message }] }), { batchItemFailures: [] });
-    assert.equal(result.content, 'Lego\nYour list ("Requester") (Games): Requester\nOther member’s list ("Other") (Games): Other');
+    assert.equal(result.content, 'Lego\nYour list ("Requester"): Love\nOther member’s list ("Other"): Crave\nVerdict: Both ratings are positive.');
   } finally {
     globalThis.fetch = oldFetch;
     if (oldChannel === undefined) delete process.env.LIST_CHANNEL_ID;

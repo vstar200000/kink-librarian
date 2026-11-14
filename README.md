@@ -89,7 +89,9 @@ The response distinguishes a missing JSON attachment, a malformed JSON list, and
 
 ## Comparing ratings
 
-Use `/compare` with `other_user` and `item` to compare your list with another member's list. Provide `your_character` and/or `other_character` when the corresponding member has multiple characters. You can also select yourself as `other_user` to compare two of your own characters. The private response shows each matching category and rating for both lists, including both labels for split ratings; it does not calculate compatibility. If an item is missing from one list, the other list's matches are still shown. The same list selection, upload, permissions, and timeout rules as `/check` apply.
+Use `/compare` with `other_user` and `item` to compare your list with another member's list. Provide `your_character` and/or `other_character` when the corresponding member has multiple characters. You can also select yourself as `other_user` to compare two of your own characters. The private response shows each rating and a verdict. `Crave` and `Love` are positive, `Willing` and `Ask Me` are neutral, and `Never` and `Hard Limit` are limits. A rating is not consent; discuss preferences and boundaries.
+
+Split ratings are compared in both directions: your `self` against their `partner` and vice versa. The same applies to `actor`/`subject` and `center`/`circle`. Each direction gets its own verdict, so a limit in one direction does not prevent a match in the other. Mixed single and split ratings, unknown ratings, or different or unrecognized role labels cannot be compared. If an item occurs more than once, matching categories are compared; unmatched categories and multiple occurrences in one category are reported. If an item is missing from one list, the other list's matches are still shown. The same list selection, upload, permissions, and timeout rules as `/check` apply.
 
 The `/test` command sends a private hello-world response.
 

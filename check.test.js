@@ -102,7 +102,7 @@ test('defers privately and returns all case-insensitive matches without mentions
   assert.equal(deferred.type, 5);
   assert.equal(deferred.data.flags, 64);
   assert.deepEqual(result, {
-    content: 'Member: First, lego: Love\nMember: Second, lego: Like',
+    content: 'lego: Love\nlego: Like',
     allowed_mentions: { parse: [] },
   });
 });
@@ -131,9 +131,9 @@ test('requests a character for multiple lists and selects the newest upload per 
   assert.deepEqual(prompt.result.allowed_mentions, { parse: [] });
 
   const selected = await runCheck({ ...options, request: withCharacter('  aNnE  ') });
-  assert.equal(selected.result.content, 'Member: Food, lego: Love');
+  assert.equal(selected.result.content, 'aNnE, lego: Love');
   const other = await runCheck({ ...options, request: withCharacter('BOB') });
-  assert.equal(other.result.content, 'Member: Food, lego: Like');
+  assert.equal(other.result.content, 'BOB, lego: Like');
 
   const unknown = await runCheck({ ...options, request: withCharacter('Unknown') });
   assert.match(unknown.result.content, /No list was found/);
@@ -144,8 +144,8 @@ test('requests a character for multiple lists and selects the newest upload per 
 test('selects a single named list automatically and rejects an incorrect character', async () => {
   const list = { ...validList, listName: 'Anne' };
   const options = { messages: [upload()], list };
-  assert.equal((await runCheck(options)).result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
-  assert.equal((await runCheck({ ...options, request: withCharacter('anne') })).result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal((await runCheck(options)).result.content, 'lego: Love\nlego: Like');
+  assert.equal((await runCheck({ ...options, request: withCharacter('anne') })).result.content, 'anne, lego: Love\nanne, lego: Like');
   assert.match((await runCheck({ ...options, request: withCharacter('Bob') })).result.content, /No list was found/);
   assert.match((await runCheck({ ...options, request: withCharacter('  ') })).result.content, /Enter a character name/);
 });
@@ -153,7 +153,7 @@ test('selects a single named list automatically and rejects an incorrect charact
 test('supports an unnamed legacy list only when it is the sole list', async () => {
   const unnamed = { ...attachment, url: 'https://cdn.discordapp.com/attachments/40/51/unnamed.json' };
   const named = { ...attachment, url: 'https://cdn.discordapp.com/attachments/40/52/named.json' };
-  assert.equal((await runCheck({ messages: [upload(unnamed)] })).result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal((await runCheck({ messages: [upload(unnamed)] })).result.content, 'lego: Love\nlego: Like');
   assert.match((await runCheck({ messages: [upload(unnamed)], request: withCharacter('Anne') })).result.content, /only list has no character name/);
   const options = {
     messages: [upload(named, '102'), upload(unnamed, '101')],
@@ -189,7 +189,7 @@ test('validates the newest revision of the selected character without falling ba
     },
   };
   assert.match((await runCheck({ ...options, request: withCharacter('Anne') })).result.content, /malformed/);
-  assert.equal((await runCheck({ ...options, request: withCharacter('Bob') })).result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal((await runCheck({ ...options, request: withCharacter('Bob') })).result.content, 'Bob, lego: Love\nBob, lego: Like');
 });
 
 test('returns both labeled values for split ratings alongside ordinary ratings', async () => {
@@ -203,10 +203,10 @@ test('returns both labeled values for split ratings alongside ordinary ratings',
   };
   const { result } = await runCheck({ messages: [upload()], list });
   assert.equal(result.content, [
-    'Member: Plain, lego: Love',
-    'Member: Roles, lego: Actor: "Love", Subject: "Ask Me"',
-    'Member: Position, lego: Center: "Like", Circle: "Maybe"',
-    'Member: People, lego: Self: "Yes", Partner: "No"',
+    'lego: Love',
+    'lego: Actor: "Love", Subject: "Ask Me"',
+    'lego: Center: "Like", Circle: "Maybe"',
+    'lego: Self: "Yes", Partner: "No"',
   ].join('\n'));
 });
 
@@ -241,7 +241,7 @@ test('pages past other messages and selects the newest matching upload', async (
     messages,
     overrides: { 'channels/70/messages?limit=100&before=101': [upload()] },
   });
-  assert.equal(result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal(result.content, 'lego: Love\nlego: Like');
   assert.ok(calls.some(call => call.url.includes('before=101')));
 
   const older = { ...attachment, url: 'https://cdn.discordapp.com/attachments/40/51/old.json' };
@@ -273,7 +273,7 @@ test('finds the latest owner-authored upload across active and archived posts', 
     'channels/73/messages?limit=100': [upload(archivedFile, '102')],
   };
   const { result, calls } = await runCheck({ overrides });
-  assert.equal(result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal(result.content, 'lego: Love\nlego: Like');
   assert.ok(calls.some(call => call.url === archivedFile.url));
   assert.ok(calls.some(call => call.url === activeFile.url));
   assert.ok(!calls.some(call => /channels\/(71|72)\/messages/.test(call.url)));
@@ -300,7 +300,7 @@ test('paginates archived posts and considers replies as well as starter messages
     'channels/71/messages?limit=100': [upload(newerFile, '102')],
   };
   const { result, calls } = await runCheck({ overrides });
-  assert.equal(result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal(result.content, 'lego: Love\nlego: Like');
   assert.ok(calls.some(call => call.url.includes('before=2026-01-01T00%3A00%3A00.001Z')));
   assert.ok(calls.some(call => call.url === newerFile.url));
   assert.equal(calls.filter(call => call.url.endsWith('/channels/70/messages?limit=100')).length, 1);
@@ -389,7 +389,7 @@ test('applies role and member permission overrides in Discord order', async () =
       ],
     },
   };
-  assert.equal((await runCheck({ messages: [upload()], overrides })).result.content, 'Member: First, lego: Love\nMember: Second, lego: Like');
+  assert.equal((await runCheck({ messages: [upload()], overrides })).result.content, 'lego: Love\nlego: Like');
 });
 
 test('rejects users outside the server and channels from other servers', async () => {

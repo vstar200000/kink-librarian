@@ -1,12 +1,8 @@
 import {
-  findItemEntries,
   formatRating,
   ListError,
-  loadUserLists,
-  selectUserList,
-  validateList,
-  verifyListAccess,
 } from './list-utils.js';
+import { createItemLookup } from './item-lookup.js';
 
 export async function lookupList(interaction, channelId, signal, user) {
   const item = interaction.data?.options?.find(option => option.name === 'item')?.value;
@@ -21,13 +17,10 @@ export async function lookupList(interaction, channelId, signal, user) {
     throw new ListError('Enter a character name, or leave the character option blank.');
   }
 
-  await verifyListAccess(guildId, channelId, signal);
-  const lists = await loadUserLists(guildId, channelId, user, signal);
-  if (!lists.unnamed && !lists.named.size) return 'No JSON attachment was found in this member’s forum posts.';
-  const list = selectUserList(lists, character);
-  validateList(list);
+  const lookup = createItemLookup(guildId, channelId, signal);
+  const { matches: entries } = await lookup(user, character, item);
   const characterPrefix = character ? `${character.trim()}, ` : '';
-  const matches = findItemEntries(list, item)
+  const matches = entries
     .map(({ item: entry }) => `${characterPrefix}${item.trim()}: ${formatRating(entry.rating)}`);
   if (!matches.length) return 'The requested item was not found in this member’s list.';
   const result = matches.join('\n');

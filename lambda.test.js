@@ -4,6 +4,9 @@ import { test } from 'node:test';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { handler as httpHandler } from './index.js';
 import { handler as workerHandler } from './worker.js';
+import { useEmptyCache } from './test-cache-support.js';
+
+useEmptyCache();
 
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const publicKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');

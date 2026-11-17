@@ -2,14 +2,10 @@ import { completeListCommand, handleListCommand } from './interaction-utils.js';
 import {
 	compareRatings,
 	compareSplitRatings,
-	findItemEntries,
 	formatRating,
 	ListError,
-	loadUserLists,
-	selectUserList,
-	validateList,
-	verifyListAccess,
 } from './list-utils.js';
+import { createItemLookup, ListAccessError } from './item-lookup.js';
 
 
 async function lookup(interaction, channelId, signal) {
@@ -34,28 +30,18 @@ async function lookup(interaction, channelId, signal) {
     }
   }
 
-  await verifyListAccess(guildId, channelId, signal);
-  const yourListsPromise = loadUserLists(guildId, channelId, user, signal);
-  const otherListsPromise = user === otherUser
-    ? yourListsPromise
-    : loadUserLists(guildId, channelId, otherUser, signal);
+  const findItem = createItemLookup(guildId, channelId, signal);
 
-  async function answers(listsPromise, character, label) {
+  async function answers(member, character, label) {
     try {
-      const lists = await listsPromise;
-      if (!lists.unnamed && !lists.named.size) {
-        throw new ListError('No JSON attachment was found in this member’s forum posts.');
-      }
-      const list = selectUserList(lists, character);
-      validateList(list);
-      const matches = findItemEntries(list, item);
+      const { name, matches } = await findItem(member, character, item);
       if (!matches.length) return { matches, content: `${label}: The requested item was not found in this member’s list.` };
-      const name = list.listName?.trim();
       const listLabel = name ? `${label} (${JSON.stringify(name)})` : label;
       const content = matches.map(({ category, item: entry }) =>
         `${listLabel}${matches.length > 1 ? ` (${category})` : ''}: ${formatRating(entry.rating)}`).join('\n');
       return { matches, content };
     } catch (error) {
+      if (error instanceof ListAccessError) throw error;
       if (!(error instanceof ListError)) throw error;
       const message = `${label}: ${error.message}`;
       throw new ListError(message.length <= 2000 ? message : `${label}: The list error is too long to display.`);
@@ -63,8 +49,8 @@ async function lookup(interaction, channelId, signal) {
   }
 
   const [yours, theirs] = await Promise.all([
-    answers(yourListsPromise, yourCharacter, 'Your list'),
-    answers(otherListsPromise, otherCharacter, 'Other member’s list'),
+    answers(user, yourCharacter, 'Your list'),
+    answers(otherUser, otherCharacter, 'Other member’s list'),
   ]);
   const verdicts = compareMatches(yours.matches, theirs.matches);
   const result = [item.trim(), yours.content, theirs.content, ...verdicts].join('\n');

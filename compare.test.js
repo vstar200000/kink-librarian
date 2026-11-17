@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleCompare } from './compare.js';
 import { compareRatings, compareSplitRatings } from './list-utils.js';
+import { useEmptyCache } from './test-cache-support.js';
+
+useEmptyCache();
 
 const interaction = {
   application_id: '10',

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { handleCheck } from './check.js';
+import { useEmptyCache } from './test-cache-support.js';
+
+useEmptyCache();
 
 const interaction = {
   application_id: '10',

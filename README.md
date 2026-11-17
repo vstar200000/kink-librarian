@@ -1,6 +1,6 @@
 # Kink Librarian
 
-A Discord app that looks up a server member's ratings from JSON files posted in a designated forum. It can run locally with Express or on AWS Lambda using a Function URL and an SQS worker.
+A Discord app that looks up a server member's ratings from JSON files posted in a designated forum and caches successful item lookups in DynamoDB. It can run locally with Express or on AWS Lambda using a Function URL and an SQS worker.
 
 ## Requirements
 
@@ -9,6 +9,7 @@ A Discord app that looks up a server member's ratings from JSON files posted in 
 - A server forum channel for list uploads. The bot needs **View Channel** and **Read Message History** permission there.
 - **Message Content Intent** enabled on the application's Bot page. Verified applications may also require Discord's approval for this privileged intent.
 - A public HTTPS endpoint for Discord interactions.
+- A DynamoDB table and AWS credentials with access to it, as described below.
 
 ## Discord setup
 
@@ -39,9 +40,9 @@ The Function URL handler verifies Discord's signature and immediately answers `/
    | Function | Image command | Environment variables |
    | --- | --- | --- |
    | HTTP | `index.handler` (image default) | `PUBLIC_KEY`: Discord application public key; `SQS_QUEUE_URL`: standard queue URL |
-   | Worker | `worker.handler` (override the image command in Lambda configuration) | `DISCORD_TOKEN`: bot token; `LIST_CHANNEL_ID`: forum channel ID |
+   | Worker | `worker.handler` (override the image command in Lambda configuration) | `DISCORD_TOKEN`: bot token; `LIST_CHANNEL_ID`: forum channel ID; `DYNAMODB_TABLE_NAME`: cache table name; `AWS_REGION`: table Region (automatically set by Lambda) |
 
-   Restrict access to function configuration and logs; Lambda encrypts environment variables at rest, but the bot token remains a secret. Do not copy `.env` into the image. The HTTP execution role needs `sqs:SendMessage` on the queue. The worker execution role needs `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` on the queue. Both roles need CloudWatch Logs permissions. If using a customer-managed KMS key for SQS, also grant the necessary KMS permissions and key-policy access.
+   Restrict access to function configuration and logs; Lambda encrypts environment variables at rest, but the bot token remains a secret. Do not copy `.env` into the image. The HTTP execution role needs `sqs:SendMessage` on the queue. The worker execution role needs `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` on the queue, plus the DynamoDB permissions below. Both roles need CloudWatch Logs permissions. If using a customer-managed KMS key for SQS, also grant the necessary KMS permissions and key-policy access.
 
 4. Add the SQS queue as an event source for the worker. Use **batch size 1** and enable **ReportBatchItemFailures** (partial batch responses), so failed messages can be retried without retrying successful ones. Set the worker timeout to at least 75 seconds: a lookup can take 60 seconds and the response edit has a separate 10-second limit. Set the queue visibility timeout to at least six times the worker timeout, for example 450 seconds for a 75-second worker timeout. Configure the dead-letter queue's maximum receive count with the token lifetime in mind.
 
@@ -53,13 +54,27 @@ SQS is at-least-once, so a job may run more than once. The worker retries a shor
 
 ## Local Express deployment
 
-Set `PUBLIC_KEY`, `DISCORD_TOKEN`, and `LIST_CHANNEL_ID` in `.env`, in addition to the registration variables above. Run `npm start`; the app listens on port 3000 by default, or the value of `PORT`. Expose the server over HTTPS, for example with `ngrok http 3000`, and use the public address followed by `/interactions` as Discord's Interactions Endpoint URL. Local Express handles the deferred lookup in the same process and does not use SQS.
+Set `PUBLIC_KEY`, `DISCORD_TOKEN`, `LIST_CHANNEL_ID`, `DYNAMODB_TABLE_NAME`, and `AWS_REGION` in `.env`, in addition to the registration variables above. Configure AWS credentials using the AWS SDK's standard credential chain, such as a local AWS profile; do not put credentials in the repository. Run `npm start`; the app listens on port 3000 by default, or the value of `PORT`. Expose the server over HTTPS, for example with `ngrok http 3000`, and use the public address followed by `/interactions` as Discord's Interactions Endpoint URL. Local Express handles the deferred lookup in the same process and does not use SQS.
+
+## DynamoDB cache
+
+Create a DynamoDB table in the chosen Region with a string partition key named `pk` and a string sort key named `sk`. On-demand capacity is suitable for an experiment; monitor usage and costs. Set `DYNAMODB_TABLE_NAME` and `AWS_REGION` for the process performing lookups. This configuration is required even if a particular lookup is not cached; missing configuration produces an error. The HTTP Lambda function does not need table access.
+
+Grant the worker role or local AWS principal `dynamodb:GetItem`, `dynamodb:Query`, and `dynamodb:PutItem` on this table. The app writes a character marker and item record together using `TransactWriteItems`; its two transaction actions are puts. If a customer-managed KMS key is used, configure the necessary KMS permissions and key policy. Use encryption at rest, restrict access to the table and backups, and choose backup and retention settings deliberately: cached ratings and character names may be sensitive.
+
+`/check`, `/exhibit`, and `/compare` share the cache. Keys isolate each server, forum, user, character, and item; names are matched case-insensitively after trimming. A successful Discord lookup stores all matching categories and ratings. Missing items and lookup errors are not cached. If DynamoDB operations fail, the bot logs a sanitized error and uses Discord, or returns the Discord result if only the write failed. A record too large for DynamoDB is not cached.
+
+Cached values **do not expire**. An updated or deleted upload does not change a cached result, and a cache hit does not recheck the bot's forum permissions or whether the upload still exists. Anyone who can use the commands can still retrieve cached ratings under the existing command visibility rules. Clear the cache when a member updates or removes a list, changes characters, or when access should be revoked. DynamoDB backups, exports, and point-in-time recovery can retain old data after records are deleted; manage those separately.
+
+When `character` is omitted, the bot uses the sole character currently known in the cache. If multiple characters are cached, it asks for a character; if none are cached, it searches Discord using the existing selection rules. The cache may contain only one of several characters actually present in Discord, so an omitted character can select that one without discovering the others. A requested character or item absent from the cache triggers a Discord search; a successful match adds that character and item. A sole unnamed legacy list remains supported.
+
+To clear one member's cache, first stop local lookup processes and disable the Lambda worker's SQS event source mapping, then wait for in-flight lookups to finish. In the DynamoDB console, query the table's `pk` for `<guild ID>#<forum channel ID>#<user ID>` and delete **all** results across all pages: both `C#` character markers and `I#` item records. Delete both kinds together so character selection and cached items remain consistent. Resume the worker and local processes afterward. Clearing all members requires deleting all such records, including every page; do not delete the table itself unless you recreate it before restarting the bot. Manual deletion requires separate administrator permissions such as `dynamodb:DeleteItem`.
 
 ## Uploading a list
 
 Each member creates a post in the configured forum and attaches their `.json` file to the initial message or a reply in their own post. One upload message must contain only one JSON attachment. Both the post owner and the upload message author must be the member whose list is being queried; `listName` does not identify the owner. Uploads in someone else's post do not count.
 
-The app identifies each character by the JSON file's `listName`, ignoring case and surrounding whitespace. Upload each character's file in your own forum post; to update a character, upload another file with the same `listName`. The newest upload for that character is authoritative across your active and archived posts, even if its list content is malformed. Renaming a character creates a separate list unless the old uploads are removed. Files larger than 2 MiB are not accepted.
+The app identifies each character by the JSON file's `listName`, ignoring case and surrounding whitespace. Upload each character's file in your own forum post; to update a character, upload another file with the same `listName` and clear the member's cache. When a lookup searches Discord, the newest upload for that character is authoritative across your active and archived posts, even if its list content is malformed. Renaming a character creates a separate list unless the old uploads are removed. Files larger than 2 MiB are not accepted.
 
 Example version 3 file:
 
@@ -81,15 +96,15 @@ Each category needs a non-empty `category` and an `items` array; every item need
 
 ## Checking a rating
 
-Use `/check` and select a server member for `user` and enter an item name for `item`, for example `/check @Anne Lego`. If the member has multiple characters, provide the `character` option; otherwise the app lists their available character names. Character and item names match exactly, ignoring case and surrounding whitespace. If the item occurs in multiple categories, the response shows each matching category and rating. An unnamed legacy list can only be checked without the `character` option.
+Use `/check` and select a server member for `user` and enter an item name for `item`, for example `/check @Anne Lego`. If the member has multiple cached characters, provide the `character` option; otherwise the app lists their cached character names. With an empty cache, Discord list selection applies. Character and item names match exactly, ignoring case and surrounding whitespace. If the item occurs in multiple categories, the response shows each matching rating. An unnamed legacy list can only be checked without the `character` option.
 
 Replies are ephemeral: only the requester sees them. Any server member who can use the command can query a list, even if they cannot view the upload channel. Ephemeral replies do not prevent the requester from sharing the information.
 
-The response distinguishes a missing JSON attachment, a malformed JSON list, and an item missing from a valid list. It also reports other problems, such as missing configuration or permissions, multiple JSON attachments in one upload, an inaccessible file, or results too large to display. To identify every character, the app must read every JSON upload; an unreadable or syntactically malformed upload prevents selection because its character cannot be identified. Remove or replace such uploads. Lookups that cannot complete within 60 seconds fail rather than reporting a missing attachment.
+On a cache miss, the response distinguishes a missing JSON attachment, a malformed JSON list, and an item missing from a valid list. It also reports other problems, such as missing configuration or permissions, multiple JSON attachments in one upload, an inaccessible file, or results too large to display. To identify every character on a Discord search, the app must read every JSON upload; an unreadable or syntactically malformed upload prevents selection because its character cannot be identified. Remove or replace such uploads. Lookups that cannot complete within 60 seconds fail rather than reporting a missing attachment.
 
 ## Exhibiting your rating
 
-Use `/exhibit` with an item name to show your own rating publicly in the channel. The command has no user option and can only query the invoking member's list. Provide `character` when you have multiple characters; if omitted, the command lists the available character names. Results, character-selection prompts, and lookup errors are public, so use `/check` instead if you want a private lookup.
+Use `/exhibit` with an item name to show your own rating publicly in the channel. The command has no user option and can only query the invoking member's list. Character selection follows the cache rules above. Results, character-selection prompts, and lookup errors are public, so use `/check` instead if you want a private lookup.
 
 ## Comparing ratings
 
@@ -104,10 +119,10 @@ The `/test` command sends a private hello-world response.
 Run the lookup and Lambda interaction tests with:
 
 ```sh
-node --test check.test.js exhibit.test.js compare.test.js lambda.test.js
+node --test check.test.js exhibit.test.js compare.test.js lambda.test.js item-cache.test.js
 ```
 
-The tests mock Discord and SQS and do not register commands or access the network.
+The tests mock Discord, SQS, and DynamoDB and do not register commands or access the network.
 
 ## Future improvements
 

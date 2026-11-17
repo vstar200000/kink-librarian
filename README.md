@@ -14,7 +14,7 @@ A Discord app that looks up a server member's ratings from JSON files posted in 
 
 1. Install dependencies with `npm install`.
 2. Copy `.env.sample` to `.env` and set `APP_ID` to the application ID and `DISCORD_TOKEN` to the bot token. Keep the token secret.
-3. Configure the bot permissions and intent above. The configured forum must belong to the server where `/check` is used.
+3. Configure the bot permissions and intent above. The configured forum must belong to the server where the list commands are used.
 4. Run `npm run register` to register the commands. This replaces the application's global command list with the commands in `commands.js`.
 5. Deploy either the Lambda setup or the local server below, then set the application's **Interactions Endpoint URL** as described for that deployment.
 
@@ -22,7 +22,7 @@ Do not commit `.env` or share your bot token. Command registration is a separate
 
 ## AWS Lambda deployment
 
-The Function URL handler verifies Discord's signature and immediately answers `/test` and PING requests. It places `/check` and `/compare` requests on SQS and returns a private deferred response. A separate worker reads the forum and edits that response. Both functions use the same container image.
+The Function URL handler verifies Discord's signature and immediately answers `/test` and PING requests. It places `/check`, `/exhibit`, and `/compare` requests on SQS and returns a deferred response (private except for `/exhibit`). A separate worker reads the forum and edits that response. Both functions use the same container image.
 
 1. Build the image and push it to a private Amazon ECR repository in the same AWS Region as the Lambda functions. For x86-64:
 
@@ -30,7 +30,7 @@ The Function URL handler verifies Discord's signature and immediately answers `/
    docker build --platform linux/amd64 --provenance=false -f dockerfile -t kink-librarian .
    ```
 
-   Authenticate Docker to ECR, tag the image with the repository URI, and push it. Choose the Lambda architecture matching the image. When you change the image, push it again and update **both** functions to the new image digest; pushing a tag alone does not update deployed functions. When first enabling `/compare`, update the worker before the HTTP function so the worker can dispatch the new jobs.
+   Authenticate Docker to ECR, tag the image with the repository URI, and push it. Choose the Lambda architecture matching the image. When you change the image, push it again and update **both** functions to the new image digest; pushing a tag alone does not update deployed functions. When first enabling `/compare` or `/exhibit`, update the worker before the HTTP function so the worker can dispatch the new jobs.
 
 2. Create a **standard** SQS queue in that Region. Enable server-side encryption, restrict access to the two function roles, and configure a dead-letter queue and alarms for failed messages. Jobs include interaction tokens and command data: never expose queue messages or log their bodies. Set a short retention period appropriate for Discord's approximately 15-minute interaction-token lifetime, for example 15 minutes; tokens in a dead-letter queue will eventually expire and cannot be replayed indefinitely.
 
@@ -47,7 +47,7 @@ The Function URL handler verifies Discord's signature and immediately answers `/
 
 5. Create a Lambda Function URL for the HTTP function with auth type **NONE** and the necessary public-invocation resource policy. Discord does not use AWS IAM credentials; the handler authenticates each request using `PUBLIC_KEY`. Set the HTTP function timeout to a few seconds and allocate enough memory and concurrency to respond within Discord's three-second deadline, including cold starts and queueing. Ensure both functions can reach their required AWS and Discord endpoints if you attach them to a VPC.
 
-6. In the Discord Developer Portal, set **Interactions Endpoint URL** to the Function URL itself, without adding `/interactions`. Discord validates the endpoint with a signed PING. Test `/test`, `/check`, and `/compare` in the server and inspect CloudWatch logs and queue/dead-letter metrics if there are errors.
+6. In the Discord Developer Portal, set **Interactions Endpoint URL** to the Function URL itself, without adding `/interactions`. Discord validates the endpoint with a signed PING. Test `/test`, `/check`, `/exhibit`, and `/compare` in the server and inspect CloudWatch logs and queue/dead-letter metrics if there are errors.
 
 SQS is at-least-once, so a job may run more than once. The worker retries a short-lived 404 if it races the deferred acknowledgement; unsuccessful response edits are reported for SQS retry. Queue delays, repeated failures, cold starts, or expired interaction tokens can still prevent a response. Protect and monitor the public Function URL and AWS resources against unwanted traffic and cost.
 
@@ -57,7 +57,7 @@ Set `PUBLIC_KEY`, `DISCORD_TOKEN`, and `LIST_CHANNEL_ID` in `.env`, in addition 
 
 ## Uploading a list
 
-Each member creates a post in the configured forum and attaches their `.json` file to the initial message or a reply in their own post. One upload message must contain only one JSON attachment. Both the post owner and the upload message author must be the member being checked; `listName` does not identify the owner. Uploads in someone else's post do not count.
+Each member creates a post in the configured forum and attaches their `.json` file to the initial message or a reply in their own post. One upload message must contain only one JSON attachment. Both the post owner and the upload message author must be the member whose list is being queried; `listName` does not identify the owner. Uploads in someone else's post do not count.
 
 The app identifies each character by the JSON file's `listName`, ignoring case and surrounding whitespace. Upload each character's file in your own forum post; to update a character, upload another file with the same `listName`. The newest upload for that character is authoritative across your active and archived posts, even if its list content is malformed. Renaming a character creates a separate list unless the old uploads are removed. Files larger than 2 MiB are not accepted.
 
@@ -87,6 +87,10 @@ Replies are ephemeral: only the requester sees them. Any server member who can u
 
 The response distinguishes a missing JSON attachment, a malformed JSON list, and an item missing from a valid list. It also reports other problems, such as missing configuration or permissions, multiple JSON attachments in one upload, an inaccessible file, or results too large to display. To identify every character, the app must read every JSON upload; an unreadable or syntactically malformed upload prevents selection because its character cannot be identified. Remove or replace such uploads. Lookups that cannot complete within 60 seconds fail rather than reporting a missing attachment.
 
+## Exhibiting your rating
+
+Use `/exhibit` with an item name to show your own rating publicly in the channel. The command has no user option and can only query the invoking member's list. Provide `character` when you have multiple characters; if omitted, the command lists the available character names. Results, character-selection prompts, and lookup errors are public, so use `/check` instead if you want a private lookup.
+
 ## Comparing ratings
 
 Use `/compare` with `other_user` and `item` to compare your list with another member's list. Provide `your_character` and/or `other_character` when the corresponding member has multiple characters. You can also select yourself as `other_user` to compare two of your own characters. The private response shows each rating and a verdict. `Crave` and `Love` are positive, `Willing` and `Ask Me` are neutral, and `Never` and `Hard Limit` are limits. A rating is not consent; discuss preferences and boundaries.
@@ -100,7 +104,7 @@ The `/test` command sends a private hello-world response.
 Run the lookup and Lambda interaction tests with:
 
 ```sh
-node --test check.test.js compare.test.js lambda.test.js
+node --test check.test.js exhibit.test.js compare.test.js lambda.test.js
 ```
 
 The tests mock Discord and SQS and do not register commands or access the network.

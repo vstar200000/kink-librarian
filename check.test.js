@@ -441,6 +441,11 @@ test('registers the optional character option with a valid Discord name', async 
     assert.deepEqual(check.options.map(({ name, type, required }) => [name, type, required]), [
       ['user', 6, true], ['item', 3, true], ['character', 3, false],
     ]);
+    const exhibit = commands.find(command => command.name === 'exhibit');
+    assert.deepEqual(exhibit.options.map(({ name, type, required }) => [name, type, required]), [
+      ['item', 3, true], ['character', 3, false],
+    ]);
+    assert.match(exhibit.description, /your own/i);
   } finally {
     globalThis.fetch = originalFetch;
     if (originalAppId === undefined) delete process.env.APP_ID;

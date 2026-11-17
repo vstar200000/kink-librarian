@@ -10,7 +10,7 @@ import { getRandomEmoji } from './utils.js';
 
 const sqs = new SQSClient({ maxAttempts: 1 });
 
-const COMMAND_LIST = ['test', 'check', 'compare'];
+const COMMAND_LIST = ['test', 'check', 'compare', 'exhibit'];
 
 function jsonResponse(statusCode, body) {
   return {
@@ -81,14 +81,18 @@ export async function handler(event) {
     }), { abortSignal: AbortSignal.timeout(1200) });
   } catch (error) {
     console.error('Could not queue lookup:', error.name);
+    const data = { content: 'Could not queue the lookup. Please try again.' };
+    if (interaction.data.name !== 'exhibit') data.flags = InteractionResponseFlags.EPHEMERAL;
     return jsonResponse(200, {
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { flags: InteractionResponseFlags.EPHEMERAL, content: 'Could not queue the lookup. Please try again.' },
+      data,
     });
   }
 
+  const data = {};
+  if (interaction.data.name !== 'exhibit') data.flags = InteractionResponseFlags.EPHEMERAL;
   return jsonResponse(200, {
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: InteractionResponseFlags.EPHEMERAL },
+    data,
   });
 }

@@ -84,6 +84,77 @@ test('queues a verified base64 check and returns an ephemeral defer', async () =
   });
 }));
 
+test('queues exhibit publicly and dispatches a self-only lookup to the worker', async () => withSettings(async () => {
+  let message;
+  SQSClient.prototype.send = async command => { message = command.input.MessageBody; };
+  const request = {
+    ...interaction,
+    member: { user: { id: '32', username: 'Requester' } },
+    data: { name: 'exhibit', options: [{ name: 'item', type: 3, value: 'Lego' }] },
+  };
+  const response = await httpHandler(signedEvent(request));
+  assert.deepEqual(JSON.parse(response.body), { type: 5, data: {} });
+  const job = JSON.parse(message);
+  assert.equal(job.data.name, 'exhibit');
+  assert.deepEqual(job.member, { user: { id: '32' } });
+  assert.deepEqual(job.data.options, request.data.options);
+
+  const oldFetch = globalThis.fetch;
+  const oldChannel = process.env.LIST_CHANNEL_ID;
+  const requests = [];
+  let result;
+  process.env.LIST_CHANNEL_ID = '40';
+  globalThis.fetch = async (input, options) => {
+    const url = input.toString();
+    requests.push(url);
+    if (url.includes('/webhooks/')) {
+      result = JSON.parse(options.body);
+      return new Response(null, { status: 200 });
+    }
+    if (url.startsWith('https://cdn.discordapp.com/')) {
+      return new Response(JSON.stringify({
+        listName: 'Requester',
+        categories: [{ category: 'Games', items: [{ name: 'Lego', rating: 'Love' }] }],
+      }));
+    }
+    const endpoint = url.replace('https://discord.com/api/v10/', '');
+    const responses = {
+      'applications/@me': { flags: 1 << 19 },
+      'channels/40': { guild_id: '20', type: 15, permission_overwrites: [] },
+      'guilds/20': { id: '20', owner_id: '99' },
+      'guilds/20/roles': [{ id: '20', permissions: String((1 << 10) | (1 << 16)) }],
+      'users/@me': { id: '50' },
+      'guilds/20/members/50': { roles: [] },
+      'guilds/20/threads/active': { threads: [
+        { id: '70', parent_id: '40', owner_id: '32' },
+        { id: '71', parent_id: '40', owner_id: '30' },
+      ] },
+      'channels/40/threads/archived/public?limit=100': { threads: [], has_more: false },
+      'channels/70/messages?limit=100': [{
+        id: '100',
+        author: { id: '32' },
+        attachments: [{
+          filename: 'list.json',
+          size: 100,
+          url: 'https://cdn.discordapp.com/attachments/40/50/list.json',
+        }],
+      }],
+    };
+    assert.ok(Object.hasOwn(responses, endpoint), `Unexpected request: ${endpoint}`);
+    return new Response(JSON.stringify(responses[endpoint]));
+  };
+  try {
+    assert.deepEqual(await workerHandler({ Records: [{ messageId: 'exhibit', body: message }] }), { batchItemFailures: [] });
+    assert.equal(result.content, 'Lego: Love');
+    assert.ok(requests.includes('https://discord.com/api/v10/channels/70/messages?limit=100'));
+    assert.ok(!requests.some(url => url.includes('/channels/71/messages?')));
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldChannel === undefined) delete process.env.LIST_CHANNEL_ID;
+    else process.env.LIST_CHANNEL_ID = oldChannel;
+  }
+}));
+
 test('handles test commands and rejects invalid or unsupported events', async () => withSettings(async () => {
   const response = await httpHandler(signedEvent({ type: 2, data: { name: 'test' } }));
   const payload = JSON.parse(response.body);
@@ -179,6 +250,19 @@ test('returns a private error when queueing fails without logging request data',
   } finally {
     console.error = oldError;
   }
+}));
+
+test('returns a public error when exhibit queueing fails', async () => withSettings(async () => {
+  SQSClient.prototype.send = async () => { throw new Error('queue failure'); };
+  const request = {
+    ...interaction,
+    data: { name: 'exhibit', options: [{ name: 'item', type: 3, value: 'Lego' }] },
+  };
+  const response = await httpHandler(signedEvent(request));
+  const payload = JSON.parse(response.body);
+  assert.equal(payload.type, 4);
+  assert.equal(Object.hasOwn(payload.data, 'flags'), false);
+  assert.match(payload.data.content, /Could not queue/);
 }));
 
 test('worker retries an early response edit and reports only failed SQS records', async () => {

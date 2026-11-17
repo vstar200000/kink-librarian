@@ -9,6 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import { handleCheck } from './check.js';
 import { handleCompare } from './compare.js';
+import { handleExhibit } from './exhibit.js';
 import { getRandomEmoji } from './utils.js';
 
 // Create an express app
@@ -59,6 +60,9 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
     }
 	if (name === 'check') {
       return handleCheck(req.body, res);
+	}
+	if (name === 'exhibit') {
+      return handleExhibit(req.body, res);
 	}
 	if (name === 'compare') {
       return handleCompare(req.body, res);

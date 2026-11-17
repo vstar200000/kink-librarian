@@ -72,6 +72,28 @@ const COMPARE_COMMAND = {
 	],
 };
 
-const ALL_COMMANDS = [TEST_COMMAND, CHECK_COMMAND, COMPARE_COMMAND];
+const EXHIBIT_COMMAND = {
+	name: 'exhibit',
+	description: 'Publicly exhibits your own survey answer.',
+	type: 1,
+	integration_types: [0],
+	contexts: [0],
+	options: [
+		{
+			type: 3,
+			name: 'item',
+			description: 'The item to exhibit',
+			required: true,
+		},
+		{
+			type: 3,
+			name: 'character',
+			description: 'The character\'s name',
+			required: false,
+		},
+	]
+};
+
+const ALL_COMMANDS = [TEST_COMMAND, CHECK_COMMAND, COMPARE_COMMAND, EXHIBIT_COMMAND];
 
 InstallGlobalCommands(process.env.APP_ID, ALL_COMMANDS);

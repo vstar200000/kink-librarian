@@ -1,5 +1,6 @@
 import { completeCheck } from './check.js';
 import { completeCompare } from './compare.js';
+import { completeExhibit } from './exhibit.js';
 
 export async function handler(event) {
   if (!Array.isArray(event.Records)) throw new Error('Expected SQS records.');
@@ -10,6 +11,8 @@ export async function handler(event) {
       const interaction = JSON.parse(record.body);
       if (interaction.data?.name === 'compare') {
         await completeCompare(interaction);
+      } else if (interaction.data?.name === 'exhibit') {
+        await completeExhibit(interaction);
       } else if (interaction.data?.name === 'check' || interaction.data?.name === undefined) {
         await completeCheck(interaction);
       } else {

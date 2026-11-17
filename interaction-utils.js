@@ -52,11 +52,10 @@ export async function completeListCommand(interaction, command, lookup) {
   }
 }
 
-export async function handleListCommand(interaction, res, command, complete) {
-  res.send({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: InteractionResponseFlags.EPHEMERAL },
-  });
+export async function handleListCommand(interaction, res, command, complete, { ephemeral = true } = {}) {
+  const data = {};
+  if (ephemeral) data.flags = InteractionResponseFlags.EPHEMERAL;
+  res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data });
   try {
     await complete(interaction);
   } catch (error) {

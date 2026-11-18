@@ -1,11 +1,11 @@
 import { completeListCommand, handleListCommand } from './interaction-utils.js';
+import { createItemLookup, ListAccessError } from './item-lookup.js';
 import {
 	compareRatings,
 	compareSplitRatings,
 	formatRating,
 	ListError,
 } from './list-utils.js';
-import { createItemLookup, ListAccessError } from './item-lookup.js';
 
 
 async function lookup(interaction, channelId, signal) {
@@ -101,5 +101,6 @@ export function completeCompare(interaction) {
 }
 
 export function handleCompare(interaction, res) {
-  return handleListCommand(interaction, res, 'compare', completeCompare);
+  const visible = interaction.data?.options?.find(option => option.name === 'visible')?.value;
+  return handleListCommand(interaction, res, 'compare', completeCompare, { ephemeral: !visible });
 }

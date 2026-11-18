@@ -1,6 +1,6 @@
 import { completeListCommand, handleListCommand } from './interaction-utils.js';
-import { ListError } from './list-utils.js';
 import { lookupList } from './list-lookup.js';
+import { ListError } from './list-utils.js';
 
 async function lookup(interaction, channelId, signal) {
   const user = interaction.data?.options?.find(option => option.name === 'user')?.value;
@@ -15,5 +15,6 @@ export function completeCheck(interaction) {
 }
 
 export function handleCheck(interaction, res) {
-  return handleListCommand(interaction, res, 'check', completeCheck);
+  const visible = interaction.data?.options?.find(option => option.name === 'visible')?.value;
+  return handleListCommand(interaction, res, 'check', completeCheck, { ephemeral: !visible });
 }

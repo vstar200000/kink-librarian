@@ -28,6 +28,58 @@ async function getDiscordJson(endpoint, signal) {
   }
 }
 
+function parseDiscordMessageLink(messageLink, guildId) {
+  if (typeof messageLink !== 'string' || !messageLink.trim() || messageLink !== messageLink.trim()) {
+    throw new ListError('Enter a valid Discord message link.');
+  }
+  let url;
+  try {
+    url = new URL(messageLink);
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    throw new ListError('Enter a valid Discord message link.');
+  }
+  const match = /^\/channels\/(\d+)\/(\d+)\/(\d+)$/.exec(url.pathname);
+  if (url.protocol !== 'https:' || url.hostname !== 'discord.com' || url.port ||
+      url.username || url.password || url.search || url.hash || !match) {
+    throw new ListError('Enter a valid Discord message link.');
+  }
+  const [, messageGuildId, channelId, messageId] = match;
+  if (messageGuildId !== guildId) {
+    throw new ListError('The message link must point to a channel in this server.');
+  }
+  return { channelId, messageId };
+}
+
+export async function verifyPngMessageLink(messageLink, guildId, userId, signal) {
+  if (typeof guildId !== 'string' || !/^\d+$/.test(guildId) ||
+      typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+    throw new ListError('This command must be used in a server.');
+  }
+  const { channelId, messageId } = parseDiscordMessageLink(messageLink, guildId);
+  const channel = await getDiscordJson(`channels/${channelId}`, signal);
+  if (channel.guild_id !== guildId) {
+    throw new ListError('The message link must point to a channel in this server.');
+  }
+  const message = await getDiscordJson(`channels/${channelId}/messages/${messageId}`, signal);
+  if (message.id !== messageId || message.channel_id !== channelId) {
+    throw new ListError('The linked Discord message could not be verified.');
+  }
+  if (message.author?.id !== userId) {
+    throw new ListError('You can only register a message that you posted.');
+  }
+  if (!Array.isArray(message.attachments) ||
+      !message.attachments.some(attachment => {
+        if (typeof attachment.content_type === 'string') {
+          return attachment.content_type.split(';', 1)[0].trim().toLowerCase() === 'image/png';
+        }
+        return typeof attachment.filename === 'string' && /\.png$/i.test(attachment.filename);
+      })) {
+    throw new ListError('The message must have a PNG attachment.');
+  }
+  return messageLink;
+}
+
 function canReadHistory(guild, channel, roles, member, botId) {
   if (guild.owner_id === botId) return true;
   if (!Array.isArray(roles) || !Array.isArray(member.roles) ||

@@ -10,6 +10,7 @@ import express from 'express';
 import { handleCheck } from './check.js';
 import { handleCompare } from './compare.js';
 import { handleExhibit } from './exhibit.js';
+import { handleLink, handleRegister } from './links.js';
 import { getRandomEmoji } from './utils.js';
 
 // Create an express app
@@ -66,6 +67,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async fun
 	}
 	if (name === 'compare') {
       return handleCompare(req.body, res);
+	}
+	if (name === 'register') {
+      return handleRegister(req.body, res);
+	}
+	if (name === 'link') {
+      return handleLink(req.body, res);
 	}
 
 		return;

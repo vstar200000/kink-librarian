@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { ListError, validateList } from './list-utils.js';
 
 const clients = new Map();
@@ -9,6 +9,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const characterKey = name => name === undefined ? 'unnamed' : `named:${normalize(name)}`;
 
 export class CacheError extends Error {}
+export class LinkStorageError extends ListError {}
 
 function clientFor(region) {
   if (!clients.has(region)) {
@@ -112,6 +113,66 @@ export function createItemCache(guildId, channelId, signal) {
             })),
           } } },
         ],
+      }));
+    },
+  };
+}
+
+export function createCharacterLinkStore(guildId, signal) {
+  const table = process.env.DYNAMODB_TABLE_NAME?.trim();
+  const region = process.env.AWS_REGION?.trim();
+  if (!table || !region) {
+    throw new ListError('DynamoDB is not configured correctly. Contact the bot administrator.');
+  }
+  if (typeof guildId !== 'string' || !/^\d+$/.test(guildId)) {
+    throw new ListError('This command must be used in a server.');
+  }
+  const client = clientFor(region);
+  const partition = userId => `LINK#${guildId}#${userId}`;
+  const sortKey = name => `L#${hash(characterKey(name))}`;
+  async function send(command) {
+    try {
+      return await client.send(command, { abortSignal: signal });
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      throw new LinkStorageError('Could not access the character link in DynamoDB. Contact the bot administrator.');
+    }
+  }
+
+  return {
+    async get(userId, name) {
+      if (typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+        throw new ListError('Choose a member of this server.');
+      }
+      const { Item: record } = await send(new GetCommand({
+        TableName: table,
+        Key: { pk: partition(userId), sk: sortKey(name) },
+        ConsistentRead: true,
+      }));
+      if (!record) return undefined;
+      if (typeof record !== 'object' || typeof record.character !== 'string' ||
+          normalize(record.character) !== normalize(name) ||
+          typeof record.messageUrl !== 'string' || !record.messageUrl) {
+        throw new LinkStorageError('The stored character link is invalid. Contact the bot administrator.');
+      }
+      return record.messageUrl;
+    },
+
+    async put(userId, name, messageUrl) {
+      if (typeof userId !== 'string' || !/^\d+$/.test(userId)) {
+        throw new ListError('This command must be used in a server.');
+      }
+      if (typeof name !== 'string' || !name.trim() || typeof messageUrl !== 'string' || !messageUrl) {
+        throw new ListError('Enter a valid character name and message link.');
+      }
+      await send(new PutCommand({
+        TableName: table,
+        Item: {
+          pk: partition(userId),
+          sk: sortKey(name),
+          character: name.trim(),
+          messageUrl,
+        },
       }));
     },
   };

@@ -1,6 +1,6 @@
 # Kink Librarian
 
-A Discord app that looks up a server member's ratings from JSON files posted in a designated forum and caches successful item lookups in DynamoDB. It can run locally with Express or on AWS Lambda using a Function URL and an SQS worker.
+A Discord app that looks up a server member's ratings from JSON files posted in a designated forum, caches successful item lookups in DynamoDB, and stores registered PNG message links by character. It can run locally with Express or on AWS Lambda using a Function URL and an SQS worker.
 
 ## Requirements
 
@@ -23,7 +23,7 @@ Do not commit `.env` or share your bot token. Command registration is a separate
 
 ## AWS Lambda deployment
 
-The Function URL handler verifies Discord's signature and immediately answers `/test` and PING requests. It places `/check`, `/exhibit`, and `/compare` requests on SQS and returns a deferred response (private except for `/exhibit`). A separate worker reads the forum and edits that response. Both functions use the same container image.
+The Function URL handler verifies Discord's signature and immediately answers `/test` and PING requests. It places `/check`, `/exhibit`, `/compare`, `/register`, and `/link` requests on SQS and returns a deferred response (private except for `/exhibit` and `/link` when made visible). A separate worker reads the forum, verifies registrations, retrieves links, and edits that response. Both functions use the same container image.
 
 1. Build the image and push it to a private Amazon ECR repository in the same AWS Region as the Lambda functions. For x86-64:
 
@@ -54,7 +54,7 @@ SQS is at-least-once, so a job may run more than once. The worker retries a shor
 
 ## Local Express deployment
 
-Set `PUBLIC_KEY`, `DISCORD_TOKEN`, `LIST_CHANNEL_ID`, `DYNAMODB_TABLE_NAME`, and `AWS_REGION` in `.env`, in addition to the registration variables above. Configure AWS credentials using the AWS SDK's standard credential chain, such as a local AWS profile; do not put credentials in the repository. Run `npm start`; the app listens on port 3000 by default, or the value of `PORT`. Expose the server over HTTPS, for example with `ngrok http 3000`, and use the public address followed by `/interactions` as Discord's Interactions Endpoint URL. Local Express handles the deferred lookup in the same process and does not use SQS.
+Set `PUBLIC_KEY`, `DISCORD_TOKEN`, `LIST_CHANNEL_ID`, `DYNAMODB_TABLE_NAME`, and `AWS_REGION` in `.env`, in addition to the registration variables above. Configure AWS credentials using the AWS SDK's standard credential chain, such as a local AWS profile; do not put credentials in the repository. Run `npm start`; the app listens on port 3000 by default, or the value of `PORT`. Expose the server over HTTPS, for example with `ngrok http 3000`, and use the public address followed by `/interactions` as Discord's Interactions Endpoint URL. Local Express handles deferred commands in the same process and does not use SQS.
 
 ## DynamoDB cache
 
@@ -63,6 +63,12 @@ Create a DynamoDB table in the chosen Region with a string partition key named `
 Grant the worker role or local AWS principal `dynamodb:GetItem`, `dynamodb:Query`, and `dynamodb:PutItem` on this table. The app writes a character marker and item record together using `TransactWriteItems`; its two transaction actions are puts. If a customer-managed KMS key is used, configure the necessary KMS permissions and key policy. Use encryption at rest, restrict access to the table and backups, and choose backup and retention settings deliberately: cached ratings and character names may be sensitive.
 
 `/check`, `/exhibit`, and `/compare` share the cache. Keys isolate each server, forum, user, character, and item; names are matched case-insensitively after trimming. A successful Discord lookup stores all matching categories and ratings. Missing items and lookup errors are not cached. If DynamoDB operations fail, the bot logs a sanitized error and uses Discord, or returns the Discord result if only the write failed. A record too large for DynamoDB is not cached.
+
+## Registering PNG links
+
+Use `/register` with a Discord message link and a character name to save a link to your own PNG attachment. The message must be in the current server and in a channel the bot can read; the bot verifies the channel, message author, and PNG attachment metadata through Discord's API. The bot parses the message link and never fetches an arbitrary URL. Registering the same character again replaces the previous link.
+
+Use `/link` with a server member and character name to retrieve that member's registered link. Character names are matched case-insensitively after trimming. The response is private by default and supports the existing visibility option. The link lookup reads only DynamoDB; it does not recheck the message, so a deleted message may leave a stale link. Link records are stored in the same table with separate keys and the existing `GetItem`/`PutItem` permissions.
 
 Cached values **do not expire**. An updated or deleted upload does not change a cached result, and a cache hit does not recheck the bot's forum permissions or whether the upload still exists. Anyone who can use the commands can still retrieve cached ratings under the existing command visibility rules. Clear the cache when a member updates or removes a list, changes characters, or when access should be revoked. DynamoDB backups, exports, and point-in-time recovery can retain old data after records are deleted; manage those separately.
 

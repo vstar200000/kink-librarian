@@ -87,6 +87,24 @@ test('queues a verified base64 check and returns an ephemeral defer', async () =
   });
 }));
 
+test('accepts and queues register and link commands for the worker', async () => withSettings(async () => {
+  const messages = [];
+  SQSClient.prototype.send = async command => {
+    messages.push(JSON.parse(command.input.MessageBody));
+    return {};
+  };
+  for (const name of ['register', 'link']) {
+    const request = {
+      ...interaction,
+      member: { user: { id: '32' } },
+      data: { name, options: [] },
+    };
+    const response = await httpHandler(signedEvent(request));
+    assert.deepEqual(JSON.parse(response.body), { type: 5, data: { flags: 64 } });
+  }
+  assert.deepEqual(messages.map(message => message.data.name), ['register', 'link']);
+}));
+
 test('queues exhibit publicly and dispatches a self-only lookup to the worker', async () => withSettings(async () => {
   let message;
   SQSClient.prototype.send = async command => { message = command.input.MessageBody; };

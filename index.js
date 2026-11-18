@@ -10,7 +10,7 @@ import { getRandomEmoji } from './utils.js';
 
 const sqs = new SQSClient({ maxAttempts: 1 });
 
-const COMMAND_LIST = ['test', 'check', 'compare', 'exhibit'];
+const COMMAND_LIST = ['test', 'check', 'compare', 'exhibit', 'register', 'link'];
 
 function jsonResponse(statusCode, body) {
   return {

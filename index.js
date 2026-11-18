@@ -65,6 +65,7 @@ export async function handler(event) {
   if (!COMMAND_LIST.includes(interaction.data?.name)) {
     return jsonResponse(400, { error: 'Unsupported command' });
   }
+	const visible = interaction.data?.options?.find(option => option.name === 'visible')?.value || interaction.data.name === 'exhibit';
 
   try {
     if (!process.env.SQS_QUEUE_URL) throw new Error('SQS_QUEUE_URL is required.');
@@ -82,7 +83,7 @@ export async function handler(event) {
   } catch (error) {
     console.error('Could not queue lookup:', error.name);
     const data = { content: 'Could not queue the lookup. Please try again.' };
-    if (interaction.data.name !== 'exhibit') data.flags = InteractionResponseFlags.EPHEMERAL;
+    if (!visible) data.flags = InteractionResponseFlags.EPHEMERAL;
     return jsonResponse(200, {
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data,
@@ -90,7 +91,7 @@ export async function handler(event) {
   }
 
   const data = {};
-  if (interaction.data.name !== 'exhibit') data.flags = InteractionResponseFlags.EPHEMERAL;
+  if (!visible) data.flags = InteractionResponseFlags.EPHEMERAL;
   return jsonResponse(200, {
     type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
     data,

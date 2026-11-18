@@ -1,0 +1,19 @@
+version: 0.2
+
+env:
+  variables:
+    ECR_REPO_URI: 236087863043.dkr.ecr.us-east-2.amazonaws.com/your-repo-name
+    LAMBDA_FUNCTION_NAME: your-function-name
+    AWS_DEFAULT_REGION: us-east-2
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI
+  build:
+    commands:
+      - docker build -t $ECR_REPO_URI:latest .
+  post_build:
+    commands:
+      - docker push $ECR_REPO_URI:latest
+      - aws lambda update-function-code --function-name $LAMBDA_FUNCTION_NAME --image-uri $ECR_REPO_URI:latest

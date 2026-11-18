@@ -34,6 +34,12 @@ const CHECK_COMMAND = {
 			name: 'character',
 			description: 'The character\'s name',
 			required: false,
+		},
+		{
+			type: 5,
+			name: 'visible',
+			description: 'Whether the answer should be visible to others',
+			required: false,
 		}
 	],
 };
@@ -67,6 +73,12 @@ const COMPARE_COMMAND = {
 			type: 3, 
 			name: 'your_character',
 			description: 'Your character\'s name',
+			required: false,
+		},
+		{
+			type: 5,
+			name: 'visible',
+			description: 'Whether the answer should be visible to others',
 			required: false,
 		}
 	],

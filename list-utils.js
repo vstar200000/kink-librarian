@@ -1,6 +1,7 @@
 import { capitalize, DiscordApiError, DiscordRequest } from './utils.js';
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
+const THREAD_STARTER_MESSAGE = 21;
 const VIEW_CHANNEL = 1n << 10n;
 const READ_MESSAGE_HISTORY = 1n << 16n;
 const ADMINISTRATOR = 1n << 3n;
@@ -65,7 +66,24 @@ export async function verifyMessageLink(messageLink, guildId, userId, signal) {
   if (message.id !== messageId || message.channel_id !== channelId) {
     throw new ListError('The linked Discord message could not be verified.');
   }
-  if (message.author?.id !== userId) {
+  let authorId = message.author?.id;
+  if (message.type === THREAD_STARTER_MESSAGE) {
+    const reference = message.message_reference;
+    if (typeof channel.parent_id !== 'string' || !/^\d+$/.test(channel.parent_id) ||
+        reference?.channel_id !== channel.parent_id ||
+        typeof reference.message_id !== 'string' || !/^\d+$/.test(reference.message_id)) {
+      throw new ListError('The linked Discord message could not be verified.');
+    }
+    const starter = await getDiscordJson(
+      `channels/${channel.parent_id}/messages/${reference.message_id}`,
+      signal,
+    );
+    if (starter.id !== reference.message_id || starter.channel_id !== channel.parent_id) {
+      throw new ListError('The linked Discord message could not be verified.');
+    }
+    authorId = starter.author?.id;
+  }
+  if (authorId !== userId) {
     throw new ListError('You can only register a message that you posted.');
   }
   return messageLink;

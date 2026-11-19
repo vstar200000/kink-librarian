@@ -135,6 +135,5 @@ The tests mock Discord, SQS, and DynamoDB and do not register commands or access
 - Consider notifying a list owner when someone checks their list and the JSON is malformed or the requested item is missing.
 - Include a "help" command for the bot to explain itself.
 - Deregister command
-- Register command should work with thread heads
 - Remove .png attachement restriction from /register
 - Character autocomplete?

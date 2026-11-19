@@ -37,10 +37,10 @@ The Function URL handler verifies Discord's signature and immediately answers `/
 
 3. Create two Lambda functions using the ECR image:
 
-   | Function | Image command | Environment variables |
-   | --- | --- | --- |
-   | HTTP | `index.handler` (image default) | `PUBLIC_KEY`: Discord application public key; `SQS_QUEUE_URL`: standard queue URL |
-   | Worker | `worker.handler` (override the image command in Lambda configuration) | `DISCORD_TOKEN`: bot token; `LIST_CHANNEL_ID`: forum channel ID; `DYNAMODB_TABLE_NAME`: cache table name; `AWS_REGION`: table Region (automatically set by Lambda) |
+   | Function | Image command                                                         | Environment variables                                                                                                                                              |
+   | -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+   | HTTP     | `index.handler` (image default)                                       | `PUBLIC_KEY`: Discord application public key; `SQS_QUEUE_URL`: standard queue URL                                                                                  |
+   | Worker   | `worker.handler` (override the image command in Lambda configuration) | `DISCORD_TOKEN`: bot token; `LIST_CHANNEL_ID`: forum channel ID; `DYNAMODB_TABLE_NAME`: cache table name; `AWS_REGION`: table Region (automatically set by Lambda) |
 
    Restrict access to function configuration and logs; Lambda encrypts environment variables at rest, but the bot token remains a secret. Do not copy `.env` into the image. The HTTP execution role needs `sqs:SendMessage` on the queue. The worker execution role needs `sqs:ReceiveMessage`, `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` on the queue, plus the DynamoDB permissions below. Both roles need CloudWatch Logs permissions. If using a customer-managed KMS key for SQS, also grant the necessary KMS permissions and key-policy access.
 
@@ -134,3 +134,7 @@ The tests mock Discord, SQS, and DynamoDB and do not register commands or access
 
 - Consider notifying a list owner when someone checks their list and the JSON is malformed or the requested item is missing.
 - Include a "help" command for the bot to explain itself.
+- Deregister command
+- Register command should work with thread heads
+- Remove .png attachement restriction from /register
+- Character autocomplete?

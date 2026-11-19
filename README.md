@@ -64,9 +64,9 @@ Grant the worker role or local AWS principal `dynamodb:GetItem`, `dynamodb:Query
 
 `/check`, `/exhibit`, and `/compare` share the cache. Keys isolate each server, forum, user, character, and item; names are matched case-insensitively after trimming. A successful Discord lookup stores all matching categories and ratings. Missing items and lookup errors are not cached. If DynamoDB operations fail, the bot logs a sanitized error and uses Discord, or returns the Discord result if only the write failed. A record too large for DynamoDB is not cached.
 
-## Registering PNG links
+## Registering message links
 
-Use `/register` with a Discord message link and a character name to save a link to your own PNG attachment. The message must be in the current server and in a channel the bot can read; the bot verifies the channel, message author, and PNG attachment metadata through Discord's API. The bot parses the message link and never fetches an arbitrary URL. Registering the same character again replaces the previous link.
+Use `/register` with a Discord message link and a character name to save a link to your own message. The message must be in the current server and in a channel the bot can read; the bot verifies the channel and message author through Discord's API, but does not require any attachments. The bot parses the message link and never fetches an arbitrary URL. Registering the same character again replaces the previous link.
 
 Use `/link` with a server member and character name to retrieve that member's registered link. Character names are matched case-insensitively after trimming. The response is private by default and supports the existing visibility option. The link lookup reads only DynamoDB; it does not recheck the message, so a deleted message may leave a stale link. Link records are stored in the same table with separate keys and the existing `GetItem`/`PutItem` permissions.
 

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { createCharacterLinkStore } from './item-cache.js';
 import { handleLink, handleRegister } from './links.js';
-import { ListError, verifyPngMessageLink } from './list-utils.js';
+import { ListError, verifyMessageLink } from './list-utils.js';
 import { handler as workerHandler } from './worker.js';
 
 async function withFixture(fn) {
@@ -20,7 +20,7 @@ async function withFixture(fn) {
   const records = new Map();
   const state = {
     records, discordRequests: [], webhookResponses: [],
-    attachment: 'list.png', contentType: 'image/png', channelGuildId: '20', messageId: '100',
+    channelGuildId: '20', messageId: '100',
   };
   const recordKey = ({ pk, sk }) => `${pk}|${sk}`;
   DynamoDBDocumentClient.prototype.send = async command => {
@@ -45,7 +45,7 @@ async function withFixture(fn) {
         id: state.messageId,
         channel_id: '70',
         author: { id: '30' },
-        attachments: [{ filename: state.attachment, content_type: state.contentType }],
+        attachments: [],
       },
     };
     if (!Object.hasOwn(responses, endpoint)) throw new Error(`Unexpected request: ${endpoint}`);
@@ -76,27 +76,22 @@ const interaction = (name, options, user = '30') => ({
   data: { name, options, resolved: { members: { 30: {}, 31: {} } } },
 });
 
-test('validates message URLs, guild, author, and PNG attachment metadata', async () => withFixture(async state => {
-  assert.equal(await verifyPngMessageLink(messageUrl, '20', '30'), messageUrl);
+test('validates message URLs, guild, and author without requiring attachments', async () => withFixture(async state => {
+  assert.equal(await verifyMessageLink(messageUrl, '20', '30'), messageUrl);
   assert.deepEqual(state.discordRequests, ['channels/70', 'channels/70/messages/100']);
 
   const before = state.discordRequests.length;
   await assert.rejects(
-    verifyPngMessageLink('https://discord.com.evil.test/channels/20/70/100', '20', '30'),
+    verifyMessageLink('https://discord.com.evil.test/channels/20/70/100', '20', '30'),
     ListError,
   );
-  await assert.rejects(verifyPngMessageLink(messageUrl.replace('/20/', '/21/'), '20', '30'), /this server/);
+  await assert.rejects(verifyMessageLink(messageUrl.replace('/20/', '/21/'), '20', '30'), /this server/);
   assert.equal(state.discordRequests.length, before);
 
   state.channelGuildId = '21';
-  await assert.rejects(verifyPngMessageLink(messageUrl, '20', '30'), /this server/);
+  await assert.rejects(verifyMessageLink(messageUrl, '20', '30'), /this server/);
   state.channelGuildId = '20';
-  await assert.rejects(verifyPngMessageLink(messageUrl, '20', '31'), /only register a message that you posted/);
-  state.contentType = undefined;
-  assert.equal(await verifyPngMessageLink(messageUrl, '20', '30'), messageUrl);
-  state.attachment = 'list.jpg';
-  state.contentType = 'image/jpeg';
-  await assert.rejects(verifyPngMessageLink(messageUrl, '20', '30'), /PNG attachment/);
+  await assert.rejects(verifyMessageLink(messageUrl, '20', '31'), /only register a message that you posted/);
 }));
 
 test('registers and replaces a member character link; link reads DynamoDB only', async () => withFixture(async state => {
@@ -115,12 +110,11 @@ test('registers and replaces a member character link; link reads DynamoDB only',
   assert.deepEqual(await workerHandler({
     Records: [{ messageId: 'register', body: JSON.stringify(registrationJob) }],
   }), { batchItemFailures: [] });
-  assert.match(state.webhookResponses.at(-1).content, /Registered the PNG link/);
+  assert.match(state.webhookResponses.at(-1).content, /Registered the message link/);
   const stored = [...state.records.values()][0];
   assert.equal(stored.character, 'Anne');
   assert.equal(stored.messageUrl, messageUrl);
 
-  state.attachment = 'replacement.png';
   state.messageId = '101';
   const replacementUrl = 'https://discord.com/channels/20/70/101';
   await handleRegister({ ...register, data: { ...register.data, options: [

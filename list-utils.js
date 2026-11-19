@@ -51,7 +51,7 @@ function parseDiscordMessageLink(messageLink, guildId) {
   return { channelId, messageId };
 }
 
-export async function verifyPngMessageLink(messageLink, guildId, userId, signal) {
+export async function verifyMessageLink(messageLink, guildId, userId, signal) {
   if (typeof guildId !== 'string' || !/^\d+$/.test(guildId) ||
       typeof userId !== 'string' || !/^\d+$/.test(userId)) {
     throw new ListError('This command must be used in a server.');
@@ -67,15 +67,6 @@ export async function verifyPngMessageLink(messageLink, guildId, userId, signal)
   }
   if (message.author?.id !== userId) {
     throw new ListError('You can only register a message that you posted.');
-  }
-  if (!Array.isArray(message.attachments) ||
-      !message.attachments.some(attachment => {
-        if (typeof attachment.content_type === 'string') {
-          return attachment.content_type.split(';', 1)[0].trim().toLowerCase() === 'image/png';
-        }
-        return typeof attachment.filename === 'string' && /\.png$/i.test(attachment.filename);
-      })) {
-    throw new ListError('The message must have a PNG attachment.');
   }
   return messageLink;
 }

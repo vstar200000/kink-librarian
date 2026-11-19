@@ -108,7 +108,7 @@ const EXHIBIT_COMMAND = {
 
 const REGISTER_COMMAND = {
 	name: 'register',
-	description: 'Registers your PNG list message.',
+	description: 'Registers a link to your message.',
 	type: 1,
 	integration_types: [0],
 	contexts: [0],
@@ -116,7 +116,7 @@ const REGISTER_COMMAND = {
 		{
 			type: 3,
 			name: 'message_link',
-			description: 'A message link to your PNG attachment in this server.',
+			description: 'A message link to your post in this server.',
 			required: true,
 		},
 		{

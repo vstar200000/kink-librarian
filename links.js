@@ -1,6 +1,6 @@
 import { completeListCommand, handleListCommand } from './interaction-utils.js';
 import { createCharacterLinkStore } from './item-cache.js';
-import { ListError, verifyPngMessageLink } from './list-utils.js';
+import { ListError, verifyMessageLink } from './list-utils.js';
 
 function commandOptions(interaction) {
   return interaction.data?.options;
@@ -19,10 +19,10 @@ async function register(interaction, _channelId, signal) {
   if (typeof character !== 'string' || !character.trim()) {
     throw new ListError('Enter a character name.');
   }
-  const verifiedUrl = await verifyPngMessageLink(messageLink, guildId, userId, signal);
+  const verifiedUrl = await verifyMessageLink(messageLink, guildId, userId, signal);
   const links = createCharacterLinkStore(guildId, signal);
   await links.put(userId, character, verifiedUrl);
-  return `Registered the PNG link for ${JSON.stringify(character.trim())}.`;
+  return `Registered the message link for ${JSON.stringify(character.trim())}.`;
 }
 
 async function lookup(interaction, _channelId, signal) {
